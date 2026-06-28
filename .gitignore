@@ -1,0 +1,41 @@
+# Build outputs
+build/
+dist/
+*.spec.bak
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Runtime data (user-generated)
+data/crash.log
+data/startup_profile.json
+data/raw_logs/
+data/.vendor_verified.json
+data/user_preferences.json
+data/user_preferences.json.*
+!data/user_preferences.json.default
+data/diagnostics/
+data/haptic_telemetry_record.jsonl
+
+# Vendor (too large for git — distributed in release zip)
+vendor/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Dev
+*.egg-info/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+dev.env

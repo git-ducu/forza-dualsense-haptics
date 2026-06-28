@@ -1,0 +1,6 @@
+python-dotenv
+hidapi
+pillow
+psutil
+numpy
+sounddevice

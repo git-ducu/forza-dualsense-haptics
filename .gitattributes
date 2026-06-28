@@ -1,0 +1,21 @@
+# Runtime data
+data/user_preferences.json export-ignore
+data/user_preferences.json.tmp export-ignore
+data/user_preferences.json.bak export-ignore
+data/crash.log export-ignore
+data/startup_profile.json export-ignore
+data/haptic_telemetry_record.jsonl export-ignore
+data/raw_logs/** export-ignore
+data/diagnostics/** export-ignore
+data/.vendor_verified.json export-ignore
+
+# Build/dev outputs
+vendor/** export-ignore
+__pycache__/** export-ignore
+*.pyc export-ignore
+*.pyo export-ignore
+build/** export-ignore
+dist/** export-ignore
+.mypy_cache/** export-ignore
+.pytest_cache/** export-ignore
+.ruff_cache/** export-ignore
