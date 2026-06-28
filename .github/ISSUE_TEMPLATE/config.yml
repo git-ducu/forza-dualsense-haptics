@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Q&A / Setup help
+    url: https://github.com/wodhks5312/forza-dualsense-haptics/discussions
+    about: Ask setup questions in Discussions.
+  - name: Feedback / Ideas
+    url: https://github.com/wodhks5312/forza-dualsense-haptics/discussions
+    about: Share tuning feedback or feature ideas.

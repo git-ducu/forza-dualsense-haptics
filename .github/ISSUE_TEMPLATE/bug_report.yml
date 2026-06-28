@@ -1,0 +1,76 @@
+name: Bug report
+description: Report a reproducible problem
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please include enough detail to reproduce it.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened?
+      placeholder: The controller connects, but trigger feedback stops after...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Exact steps to reproduce the issue.
+      placeholder: |
+        1. Start FHDS
+        2. Enable Forza Horizon Data Out
+        3. Connect DualSense via USB
+        4. ...
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: FHDS version / commit
+      placeholder: v0.1.0 or commit hash
+    validations:
+      required: false
+
+  - type: dropdown
+    id: connection
+    attributes:
+      label: Controller connection
+      options:
+        - USB
+        - Bluetooth
+        - Both tested
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: game
+    attributes:
+      label: Game
+      placeholder: Forza Horizon 5 / Forza Horizon 6
+    validations:
+      required: false
+
+  - type: input
+    id: udp
+    attributes:
+      label: Data Out host / port
+      placeholder: 127.0.0.1:5300
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / screenshots
+      description: Paste logs or attach screenshots if available.
+      render: text
+    validations:
+      required: false
