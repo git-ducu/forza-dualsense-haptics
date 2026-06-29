@@ -373,8 +373,8 @@ class Settings:
 
     # MARK: DualSense haptic audio
     # Direct audio-haptic output path. Requires USB DualSense exposed
-    # as a 4-channel Windows audio output device. Disabled by default.
-    enable_haptic_audio: bool = False
+    # as a 4-channel Windows audio output device.
+    enable_haptic_audio: bool = True
     enable_haptic_audio_log: bool = False
     # User-facing coarse haptic switches. The detailed material/event gains stay
     # internal so the controller tab does not become a debug board.

@@ -644,6 +644,14 @@ class HapticAudioEngine:
         vehicle_flavor_enabled = bool(_ga(_settings, "haptic_vehicle_flavor_enabled", True))
         spatial_haptics_enabled = bool(_ga(_settings, "haptic_spatial_haptics_enabled", True))
 
+        # Gate idle_engine at source: when idle haptics are disabled, zero the
+        # amplitude so downstream consumers (engine bass, musical mixer glue)
+        # cannot leak idle vibration.  Strength scaling is applied once in the
+        # dedicated add_lr call and in the engine-bass leak path below.
+        _idle_strength = _gain(_ga(_settings, "haptic_idle_strength", 0.38), 0.0, 3.0)
+        if not idle_enabled or _idle_strength <= 0.0:
+            st.idle_engine = 0.0
+
         side_focus = max(
             abs(float(st.weight_l) - float(st.weight_r)),
             abs(float(st.asphalt_grip_l) - float(st.asphalt_grip_r)),
@@ -756,8 +764,8 @@ class HapticAudioEngine:
         def bus_arrays(layer: str | None, gain_name: str):
             # 4-bus routing: surface (continuous) / vehicle / engine / event
             # Engine bus: RPM, idle, boost, torque - SEPARATE from vehicle body motion
-            event_names = {"kerb", "puddle", "bump", "collision", "scrape", "rear_echo", "transition", "water", "shift"}
-            engine_names = {"idle", "rpm", "boost", "torque", "launch"}  # NEW: engine/drivetrain bus
+            event_names = {"kerb", "puddle", "bump", "collision", "scrape", "rear_echo", "transition", "water", "shift", "engine_start", "decel_onset", "shift_engagement"}
+            engine_names = {"idle", "rpm", "boost", "torque", "launch", "turbo", "engine_braking", "corner_exit", "redline", "rpm_harmonics", "accel_onset"}  # engine/drivetrain bus
             vehicle_names = {"weight", "asphalt_grip", "slide", "drift", "wheelspin", "scrub", "brake", "understeer", "oversteer", "landing"}
             
             # Engine bus routing (RPM, idle, boost, torque)
@@ -964,29 +972,106 @@ class HapticAudioEngine:
             rpm_sig_l = self._osc["rpm_texture_l"].sine(frames, sr, rpm_freq)
             rpm_sig_r = self._osc["rpm_texture_r"].sine(frames, sr, rpm_freq * 1.015)
             rpm_g = _gain(_ga(_settings, "haptic_rpm_texture_gain", 0.80), 0.0, 1.5)
-            # high RPM harmonic enrichment → above 0.7 rpm_ratio, blend in
-            # 2nd/3rd harmonics for high-rev engine character (Mazda/Honda feel).
-            # Tester: high-RPM engines lacked HF texture, just volume.
-            if rpm_n > 0.65:
-                # High-RPM harmonic enrichment: 65%→redline blends in 2nd/3rd harmonics
-                # for screaming engine feel (Honda VTEC / Mazda rotary character).
-                harm_blend = min(1.0, (rpm_n - 0.65) / 0.35) * 0.72  # 0→72% at redline
-                # FIX: LRA sweet spot caps at 180Hz. 380/420Hz is inaudible vibration.
-                h2_freq = min(180.0, rpm_freq * 2.0)  # 2nd harmonic, capped at LRA sweet spot
-                h3_freq = min(180.0, rpm_freq * 2.5)  # pseudo-3rd, capped
-                h2_l = self._osc["rpm_harmonic2_l"].sine(frames, sr, h2_freq) * harm_blend * 0.85
-                h2_r = self._osc["rpm_harmonic2_r"].sine(frames, sr, h2_freq * 1.02) * harm_blend * 0.85
-                h3_l = self._osc["rpm_harmonic3_l"].sine(frames, sr, h3_freq) * harm_blend * 0.45
-                h3_r = self._osc["rpm_harmonic3_r"].sine(frames, sr, h3_freq * 1.03) * harm_blend * 0.45
-                rpm_sig_l = rpm_sig_l * (1.0 - harm_blend * 0.30) + h2_l + h3_l
-                rpm_sig_r = rpm_sig_r * (1.0 - harm_blend * 0.30) + h2_r + h3_r
-                # High-RPM amplitude boost: more aggressive for race-car feel
-                rpm_amp *= (1.0 + harm_blend * 0.70)
+            # Cylinder-count-based RPM harmonics (4/6/8+ cyl differentiation).
+            # 4cyl: mechanical 2nd harmonic, 6cyl: smooth 1.5x+2.5x, 8cyl+: sub-bass rumble.
+            harm_str = _gain(_ga(_settings, "haptic_rpm_harmonics_strength", 0.45), 0.0, 1.5)
+            if rpm_n > 0.15 and harm_str > 0.0:
+                cyl = int(getattr(st, "cylinder_count", 4))
+                fund_freq = 40.0 + rpm_n * 80.0  # 40-120Hz fundamental
+                if "rpm_harm_sub" not in self._osc:
+                    self._osc["rpm_harm_sub"] = Osc()
+                fund_l = self._osc["rpm_harmonic2_l"].sine(frames, sr, fund_freq)
+                fund_r = self._osc["rpm_harmonic2_r"].sine(frames, sr, fund_freq * 1.01)
+                if cyl <= 4:
+                    # 4-cyl: 2nd harmonic emphasis (mechanical feel)
+                    h1_l = self._osc["rpm_harmonic3_l"].sine(frames, sr, min(fund_freq * 2.0, 180.0)) * 0.35
+                    h1_r = self._osc["rpm_harmonic3_r"].sine(frames, sr, min(fund_freq * 2.0, 180.0) * 1.02) * 0.35
+                    harm_sig_l = fund_l * 0.55 + h1_l
+                    harm_sig_r = fund_r * 0.55 + h1_r
+                elif cyl <= 6:
+                    # 6-cyl: 1.5x + 2.5x harmonics (smooth, balanced)
+                    h1_l = self._osc["rpm_harmonic3_l"].sine(frames, sr, min(fund_freq * 1.5, 180.0)) * 0.30
+                    h1_r = self._osc["rpm_harmonic3_r"].sine(frames, sr, min(fund_freq * 1.5, 180.0) * 1.02) * 0.30
+                    harm_sig_l = fund_l * 0.50 + h1_l
+                    harm_sig_r = fund_r * 0.50 + h1_r
+                else:
+                    # 8-cyl+: sub-bass emphasis (deep rumble)
+                    sub_l = self._osc["rpm_harm_sub"].sine(frames, sr, max(30.0, fund_freq * 0.5)) * 0.40
+                    h1_l = self._osc["rpm_harmonic3_l"].sine(frames, sr, min(fund_freq * 2.0, 170.0)) * 0.20
+                    h1_r = self._osc["rpm_harmonic3_r"].sine(frames, sr, min(fund_freq * 2.0, 170.0) * 1.02) * 0.20
+                    harm_sig_l = fund_l * 0.40 + sub_l + h1_l
+                    harm_sig_r = fund_r * 0.40 + sub_l + h1_r
+                harm_amp = rpm_n * harm_str * 0.5
+                rpm_sig_l += harm_sig_l * harm_amp
+                rpm_sig_r += harm_sig_r * harm_amp
+                # Boost base amplitude when harmonics are active (keeps overall loudness)
+                rpm_amp *= (1.0 + min(1.0, rpm_n) * harm_str * 0.35)
             # RPM goes to continuous bus → independent of vehicle bus gain,
             # so chassis vibration can be killed without losing engine feel.
             # FIX: RPM goes to engine bus, not continuous(surface), to avoid being buried by road noise.
             engine_l += rpm_sig_l * rpm_amp * rpm_g
             engine_r += rpm_sig_r * rpm_amp * rpm_g
+
+        # ── Turbo spool: high-freq whistle on boost build-up ──
+        _turbo = float(getattr(st, "turbo_spool", 0.0))
+        if _turbo > 0.01:
+            _turbo_str = _gain(_ga(_settings, "haptic_turbo_spool_strength", 0.40), 0.0, 1.5)
+            if _turbo_str > 0.0:
+                if "turbo_spool" not in self._osc:
+                    self._osc["turbo_spool"] = Osc()
+                # AM modulation for "whiiiiing" spool feel (120-165Hz carrier)
+                _ts_freq = 120.0 + _turbo * 45.0
+                _ts_am_freq = 8.0 + _turbo * 12.0
+                _ts_am = 0.6 + 0.4 * np.sin(2.0 * np.pi * _ts_am_freq * np.arange(frames, dtype=np.float32) / float(sr))
+                _ts_sig = self._osc["turbo_spool"].sine(frames, sr, _ts_freq) * 0.65 * _ts_am + noise(frames, 0.20)
+                _ts_amp = _turbo * _turbo_str * 0.45
+                engine_l += _ts_sig * _ts_amp
+                engine_r += _ts_sig * _ts_amp
+
+        # ── Engine braking: drag feel on deceleration ──
+        _eb = float(getattr(st, "engine_braking", 0.0))
+        if _eb > 0.01:
+            _eb_str = _gain(_ga(_settings, "haptic_engine_braking_strength", 0.50), 0.0, 1.5)
+            if _eb_str > 0.0:
+                if "engine_braking" not in self._osc:
+                    self._osc["engine_braking"] = Osc()
+                _eb_freq = 48.0 + _eb * 17.0  # 48-65Hz low rumble
+                _eb_sig = self._osc["engine_braking"].sine(frames, sr, _eb_freq) * 0.75 + noise(frames, 0.18)
+                _eb_amp = _eb * _eb_str * 0.5
+                engine_l += _eb_sig * _eb_amp
+                engine_r += _eb_sig * _eb_amp
+
+        # ── Corner exit torque: power delivery feel on corner exit ──
+        _cet = float(getattr(st, "corner_exit_torque", 0.0))
+        if _cet > 0.01:
+            _cet_str = _gain(_ga(_settings, "haptic_corner_exit_strength", 0.55), 0.0, 2.0)
+            if _cet_str > 0.0:
+                if "corner_exit" not in self._osc:
+                    self._osc["corner_exit"] = Osc()
+                _cet_sig = self._osc["corner_exit"].sine(frames, sr, 55.0) * 0.70 + noise(frames, 0.20)
+                # 15ms attack envelope
+                _cet_t = np.arange(frames, dtype=np.float32) / float(sr)
+                _cet_env = np.minimum(1.0, _cet_t / 0.015)
+                _cet_amp = _cet * _cet_str * 0.6
+                engine_l += _cet_sig * _cet_amp * _cet_env
+                engine_r += _cet_sig * _cet_amp * _cet_env
+
+        # ── Redline warning: pulse vibration at RPM 90%+ ──
+        if rpm_n >= 0.90:
+            _rl_str = _gain(_ga(_settings, "haptic_redline_warning_strength", 0.65), 0.0, 2.0)
+            if _rl_str > 0.0:
+                if "redline_warn" not in self._osc:
+                    self._osc["redline_warn"] = Osc()
+                # Duck haptic if trigger redline_pulse is also active
+                _rl_duck = 0.5 if (bool(_ga(_settings, "enable_trigger_redline_pulse", True)) and rpm_n >= 0.92) else 1.0
+                _rl_over = min(1.0, (rpm_n - 0.90) / 0.10)  # 0→1 over 90-100%
+                _rl_pulse_freq = 12.0 + _rl_over * 13.0  # 12-25Hz pulse
+                _rl_pulse = pulse_train(frames, sr, _rl_pulse_freq, 0.50)
+                _rl_carrier = self._osc["redline_warn"].sine(frames, sr, 100.0)
+                _rl_sig = _rl_pulse * _rl_carrier
+                _rl_amp = (0.5 + _rl_over * 0.5) * _rl_str * _rl_duck
+                engine_l += _rl_sig * _rl_amp
+                engine_r += _rl_sig * _rl_amp
 
         # Pitch/roll body motion: braking dive and cornering lean as low rumble.
         # These use the vehicle bus so mastering can duck them during events.
@@ -1261,7 +1346,7 @@ class HapticAudioEngine:
             bass_master = wide_gain_setting("haptic_bass_foundation_gain", 1.5, 3.0)
             if bass_master > 0.0:
                 speed_floor = max(0.0, min(1.0, (speed - 135.0) / 150.0)) * (0.35 + 0.65 * center_vehicle_duck)
-                engine_amp = max(st.idle_engine * 0.78, st.launch_load * 0.90, st.launch_release * 1.00, st.torque_surge * 0.78, st.boost_build * 0.54)
+                engine_amp = max(st.idle_engine * 0.78 * _idle_strength, st.launch_load * 0.90, st.launch_release * 1.00, st.torque_surge * 0.78, st.boost_build * 0.54)
                 engine_bass = self._osc["engine_bass"].sine(frames, sr, hz(0.050)) * 1.36 + noise(frames, 0.045)
                 high_bass = self._osc["high_speed_bass"].sine(frames, sr, hz(0.065)) * 1.02 + noise(frames, 0.032)
                 add_lr(engine_bass, engine_bass, engine_amp * bass_master * shift_engine_duck, engine_amp * bass_master * shift_engine_duck, "haptic_engine_bass_strength", 0.42, layer="engine")
@@ -1444,6 +1529,64 @@ class HapticAudioEngine:
         st.accel_onset = transients.get("accel_onset", 0.0)
         st.decel_onset = transients.get("decel_onset", 0.0)
         st.shift_engagement = transients.get("shift_engage", 0.0)
+
+        # ── Engine start: starter motor + ignition sequence (event bus) ──
+        _es = float(getattr(st, "engine_start", 0.0))
+        if _es > 0.01:
+            _es_str = _gain(_ga(_settings, "haptic_engine_start_strength", 0.70), 0.0, 2.0)
+            if _es_str > 0.0:
+                if "engine_start_s" not in self._osc:
+                    self._osc["engine_start_s"] = Osc()
+                    self._osc["engine_start_i"] = Osc()
+                # Starter motor: 85Hz + 20Hz pulse train
+                _es_starter = self._osc["engine_start_s"].sine(frames, sr, 85.0) * 0.5
+                _es_starter += pulse_train(frames, sr, 20.0, 0.35) * 0.3
+                # Ignition catch: 52Hz LRA-range thump
+                _es_ignite = self._osc["engine_start_i"].sine(frames, sr, 52.0) * 0.65
+                _es_sig = _es_starter * 0.6 + _es_ignite * 0.4
+                _es_amp = _es * _es_str
+                event_l += _es_sig * _es_amp
+                event_r += _es_sig * _es_amp
+
+        # ── Accel onset: sudden acceleration burst (engine bus) ──
+        if st.accel_onset > 0.01:
+            _ao_str = _gain(_ga(_settings, "haptic_accel_onset_strength", 0.55), 0.0, 2.0)
+            if _ao_str > 0.0:
+                # BURST: 90Hz × 4 cycles = 44ms sharp thump
+                _ao_dur = 4.0 / 90.0
+                _ao_n = min(frames, int(_ao_dur * sr))
+                _ao_t = np.arange(_ao_n, dtype=np.float32) / float(sr)
+                _ao_burst = np.zeros(frames, dtype=np.float32)
+                _ao_burst[:_ao_n] = np.sign(np.sin(2.0 * np.pi * 90.0 * _ao_t)) * st.accel_onset * _ao_str
+                engine_l += _ao_burst
+                engine_r += _ao_burst
+
+        # ── Decel onset: sudden deceleration burst (event bus) ──
+        if st.decel_onset > 0.01:
+            _do_str = _gain(_ga(_settings, "haptic_decel_onset_strength", 0.50), 0.0, 2.0)
+            if _do_str > 0.0:
+                # BURST: 75Hz × 5 cycles = 67ms heavier thump
+                _do_dur = 5.0 / 75.0
+                _do_n = min(frames, int(_do_dur * sr))
+                _do_t = np.arange(_do_n, dtype=np.float32) / float(sr)
+                _do_burst = np.zeros(frames, dtype=np.float32)
+                _do_burst[:_do_n] = np.sign(np.sin(2.0 * np.pi * 75.0 * _do_t)) * st.decel_onset * _do_str
+                event_l += _do_burst
+                event_r += _do_burst
+
+        # ── Shift engagement: clutch engagement shock (event bus) ──
+        if st.shift_engagement > 0.01:
+            _se_str = _gain(_ga(_settings, "haptic_shift_engagement_strength", 0.65), 0.0, 2.0)
+            if _se_str > 0.0:
+                # BURST: 80Hz × 4 cycles = 50ms crisp thud
+                _se_dur = 4.0 / 80.0
+                _se_n = min(frames, int(_se_dur * sr))
+                _se_t = np.arange(_se_n, dtype=np.float32) / float(sr)
+                _se_burst = np.zeros(frames, dtype=np.float32)
+                _se_burst[:_se_n] = np.sign(np.sin(2.0 * np.pi * 80.0 * _se_t)) * st.shift_engagement * _se_str
+                event_l += _se_burst
+                event_r += _se_burst
+
         continuous_l, continuous_r, vehicle_l, vehicle_r, event_l, event_r, mix_diag = apply_musical_mix(
             st=st, settings=_settings, oscs=self._osc, frames=frames, sr=sr, hz=hz,
             continuous_l=continuous_l, continuous_r=continuous_r,

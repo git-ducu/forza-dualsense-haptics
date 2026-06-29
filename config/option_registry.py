@@ -67,8 +67,9 @@ ADVANCED_SECTIONS = [
         OptionSpec("haptic_spatial_haptics_enabled", "Spatial haptics", "공간감 햅틱", "Haptic", None, None, None, "advanced", "safe", "haptic"),
         OptionSpec("haptic_rpm_texture_enabled", "RPM body texture", "RPM 바디 텍스처", "Haptic", None, None, None, "advanced", "safe", "haptic"),
         OptionSpec("haptic_body_motion_enabled", "Body motion (pitch/roll)", "차체 모션 (피칭/롤)", "Haptic", None, None, None, "advanced", "safe", "haptic"),
-        OptionSpec("haptic_traction_pulse_enabled", "Traction pulse", "트랙션 펄스", "Haptic", None, None, None, "advanced", "safe", "haptic"),
-    ]),
+        OptionSpec("haptic_traction_pulse_enabled", "Traction pulse", "트랙션 펄스", "Haptic", None, None, None, "advanced", "safe", "haptic"),        OptionSpec("haptic_mastering_enabled", "Audio mastering", "오디오 마스터링", "Haptic", None, None, None, "advanced", "safe", "haptic",
+                   "ON: 내부 마스터링 후처리 적용. OFF: 마스터링 없이 원본 출력.",
+                   "ON: 내부 마스터링 후처리 적용. OFF: 마스터링 없이 원본 출력."),    ]),
     ("Trigger output", [
         OptionSpec("trigger_master_gain", "Trigger overall strength", "트리거 전체 세기", "Trigger", 0.0, 1.80, 0.01, "advanced", "safe", "trigger", "전체 트리거 피드백을 한번에 키우거나 줄입니다. 0으로 내리면 트리거 피드백 전부 꺼짐.", "전체 트리거 피드백을 한번에 키우거나 줄입니다. 0으로 내리면 트리거 피드백 전부 꺼짐.", 0.0, 2.5),
         OptionSpec("trigger_l2_gain", "L2 (brake) strength", "L2 (브레이크) 세기", "Trigger", 0.0, 2.00, 0.05, "advanced", "safe", "trigger",
@@ -326,6 +327,7 @@ SETTINGS_GROUPS = [
         "title": "🎮 햅틱 마스터 / Haptic Master",
         "description": "[햅틱] 전체 세기 + 버스별 비율. 버스를 조절하면 하위 항목 전부에 영향.",
         "always": [
+            "enable_haptic_audio",
             "haptic_master_gain",
             "haptic_fatigue_control",
             "haptic_surface_bus_gain",
@@ -408,10 +410,10 @@ SETTINGS_GROUPS = [
     },
     {
         "title": "🎛️ 고급 / Advanced",
-        "description": "[햅틱] 내부 오디오 마스터링. 위 설정들로 해결 안될 때만 사용.",
+        "description": "[햅틱] 내부 오디오 마스터링. 마스터링 ON/OFF로 후처리 제어.",
         "always": [],
         "switches": {
-            "enable_haptic_audio": [
+            "haptic_mastering_enabled": [
                 "haptic_bass_foundation_gain",
                 "haptic_sub_bass_boost",
                 "haptic_mid_texture_balance",

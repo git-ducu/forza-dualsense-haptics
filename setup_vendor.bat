@@ -11,7 +11,7 @@ echo.
 where python >nul 2>nul
 if errorlevel 1 (
     echo ERROR: python was not found in PATH.
-    echo Install Python 3.13 x64 (recommended), then run this again.
+    echo Install Python 3.13 x64 ^(recommended^), then run this again.
     pause
     exit /b 1
 )

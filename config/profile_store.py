@@ -55,7 +55,7 @@ class PreferencesError(Exception):
     """Raised when the settings file is unreadable or malformed."""
 
 def _version() -> str:
-    return "1.00"
+    return "1.0.1"
 
 
 def _fields(s) -> dict:

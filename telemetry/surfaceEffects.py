@@ -1442,7 +1442,6 @@ def build_state(t, s, now: float | None = None) -> HapticState:
     idle_raw = 0.0
     if idle_cond:
         idle_raw = (1.0 - speed / 8.0) * (0.25 + torque_n * _clamp(_gain(s, "haptic_idle_torque_scale", 0.65), 0.0, 1.5))
-        idle_raw *= 0.65 + 0.35 * _clamp(_gain(s, "haptic_idle_strength", 0.22), 0.0, 1.0)
     idle_engine = _smooth("idle_engine", _clamp(idle_raw), 0.22, 0.10)
 
     # Launch load: brake+throttle torque build-up for drag/lauch-control style starts.

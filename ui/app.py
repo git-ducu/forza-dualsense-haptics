@@ -35,7 +35,7 @@ from PySide6.QtGui import QAction
 from runtime import loop, diagnostics
 from config import profile_store as preferences, paths
 
-VERSION = "1.00"
+VERSION = "1.0.1"
 def t(s: str) -> str: return s
 from dsio.trigger.effects import clearEffect, buildSimpleVibration
 from runtime.factory import make_backend
