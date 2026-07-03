@@ -542,6 +542,7 @@ class Settings:
     # Engine enhancement (6 features)
     haptic_rpm_harmonics_strength: float = 0.45  # 실린더 배음 (4/6/8기통 느낌)
     haptic_redline_warning_strength: float = 0.65 # 레드라인 펄스 경고
+    haptic_redline_warning_width: float = 0.08     # 햅틱 레드라인 경고 구간 폭 (usable RPM range 비례)
     haptic_turbo_spool_strength: float = 0.40    # 터보 빌드업 고주파 휘슬
     haptic_engine_braking_strength: float = 0.50 # 엔진 브레이킹 저항감
     haptic_corner_exit_strength: float = 0.55    # 코너 출구 파워온 토크

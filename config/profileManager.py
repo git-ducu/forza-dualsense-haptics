@@ -13,55 +13,12 @@ _DEFAULT = preferences.DEFAULT_PROFILE_NAME
 _CORE = getattr(preferences, "CORE_BASE_PROFILE_NAME", "DHE Core Base")
 
 # ── Preset metadata: display labels and descriptions ──
-# Used by profiles_tab to show Korean labels + short descriptions.
 PRESET_META: dict[str, dict[str, str]] = {
     "DHE Core Base": {
         "label_ko": "코어 베이스",
         "label_en": "Core Base",
         "desc_ko": "기준 세팅. 트리거와 햅틱이 균형 잡힌 기본값.",
         "desc_en": "Reference preset. Balanced trigger and haptic defaults.",
-    },
-    "DHE Balanced": {
-        "label_ko": "밸런스드",
-        "label_en": "Balanced",
-        "desc_ko": "코어 베이스에서 전체적으로 10~15% 올린 풍성한 피드백.",
-        "desc_en": "10-15% stronger across the board for richer feedback.",
-    },
-    "DHE Deep Spectrum": {
-        "label_ko": "딥 스펙트럼",
-        "label_en": "Deep Spectrum",
-        "desc_ko": "저음 웅장하게, 고음 부드럽게. 공간감 최대. 트리거는 기본 유지.",
-        "desc_en": "Heavy bass, soft highs, max spatial. Triggers at default.",
-    },
-    "DHE Telemetry Punch": {
-        "label_ko": "텔레메트리 펀치",
-        "label_en": "Telemetry Punch",
-        "desc_ko": "트리거+햅틱 둘 다 확실하게. 변속, 충돌, 저항 전부 강하게.",
-        "desc_en": "Everything hits hard. Shifts, impacts, resistance all boosted.",
-    },
-    "DHE Trigger Focus": {
-        "label_ko": "트리거 포커스",
-        "label_en": "Trigger Focus",
-        "desc_ko": "트리거 피드백 극대화, 햅틱은 최소. 페달 조작감에 집중.",
-        "desc_en": "Max trigger feedback, minimal haptic. Pedal feel focused.",
-    },
-    "DHE Low Fatigue": {
-        "label_ko": "로우 피로도",
-        "label_en": "Low Fatigue",
-        "desc_ko": "장시간 플레이용. 전부 부드럽고 가볍게. 손 안 아픔.",
-        "desc_en": "For long sessions. Everything gentle and light on hands.",
-    },
-    "DHE Haptic Only": {
-        "label_ko": "햅틱 온리",
-        "label_en": "Haptic Only",
-        "desc_ko": "트리거 피드백 완전 OFF. 햅틱 오디오만 풍성하게.",
-        "desc_en": "All trigger feedback OFF. Rich haptic audio only.",
-    },
-    "DHE Trigger Only": {
-        "label_ko": "트리거 온리",
-        "label_en": "Trigger Only",
-        "desc_ko": "햅틱 완전 OFF. 순수 트리거 피드백만 강하게.",
-        "desc_en": "All haptic OFF. Strong trigger feedback only.",
     },
 }
 

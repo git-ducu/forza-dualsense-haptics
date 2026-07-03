@@ -227,15 +227,25 @@ class RedlineWarningRenderer(SourceRenderer):
             return self._empty_output(ctx)
         
         rpm_norm = float(getattr(st, "rpm_norm", 0.0))
-        redline_threshold = 0.90  # 90% --상--서 --작
+
+        # Dynamic redline threshold based on usable RPM range (matches trigger logic)
+        max_rpm = float(getattr(st, "max_rpm", 0.0))
+        idle_rpm = float(getattr(st, "idle_rpm", 0.0))
+        warning_width = float(getattr(ctx.settings, "haptic_redline_warning_width", 0.08))
+        if max_rpm > 0 and idle_rpm >= 0:
+            usable_range = max_rpm - idle_rpm
+            margin_ratio = (usable_range * warning_width) / max_rpm
+            redline_threshold = max(0.70, 0.93 - margin_ratio)
+        else:
+            redline_threshold = 0.90
         
         if rpm_norm < redline_threshold:
             return self._empty_output(ctx)
         
-        # --리--redline_pulse가 --성--면 haptic-- duck (--시 발동 방--)
+        # Duck haptic if trigger redline_pulse is also active above rev limiter threshold
         trigger_redline_on = bool(getattr(ctx.settings, "enable_trigger_redline_pulse", True))
-        if trigger_redline_on and rpm_norm >= 0.92:
-            # --리거-- 92%부──동───haptic-- 50%--줄임
+        rev_limit_ratio = float(getattr(ctx.settings, "rev_limit_ratio", 0.93))
+        if trigger_redline_on and rpm_norm >= rev_limit_ratio:
             duck_factor = 0.5
         else:
             duck_factor = 1.0

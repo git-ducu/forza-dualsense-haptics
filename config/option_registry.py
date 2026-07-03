@@ -220,6 +220,8 @@ ADVANCED_SECTIONS = [
                    "▼ Lower: generic engine. ▲ Higher: feel 4/6/8-cyl character.", "▼ 낮추면: 엔진 느낌 일반. ▲ 높이면: 4/6/8기통 특성 느낌."),
         OptionSpec("haptic_redline_warning_strength", "Redline warning pulse", "레드라인 경고", "Engine", 0.0, 2.0, 0.01, "advanced", "safe", "haptic",
                    "▼ Lower: subtle warning. ▲ Higher: urgent shift-now pulse.", "▼ 낮추면: 은은한 경고. ▲ 높이면: 급히 변속하라는 강한 펄스."),
+        OptionSpec("haptic_redline_warning_width", "Redline haptic width", "레드라인 햅틱 구간폭", "Engine", 0.03, 0.20, 0.01, "advanced", "safe", "haptic",
+                   "▼ Narrower: late warning. ▲ Wider: earlier onset for low-rev cars.", "▼ 좁으면: 늦은 경고. ▲ 넓으면: 저회전 차에서 더 일찍 경고."),
         OptionSpec("haptic_turbo_spool_strength", "Turbo spool-up", "터보 스풀업", "Engine", 0.0, 1.5, 0.01, "advanced", "safe", "haptic",
                    "▼ Lower: quiet turbo. ▲ Higher: feel boost building.", "▼ 낮추면: 터보 조용. ▲ 높이면: 부스트 올라오는 느낌."),
         OptionSpec("haptic_engine_braking_strength", "Engine braking", "엔진 브레이킹", "Engine", 0.0, 1.5, 0.01, "advanced", "safe", "haptic",
@@ -318,7 +320,7 @@ SETTINGS_GROUPS = [
             "enable_throttle_resistance": [],
             "enable_rev_limiter": [],
             "enable_rev_limiter_pattern": [],
-            "enable_trigger_redline_pulse": ["trigger_redline_strength"],
+            "enable_trigger_redline_pulse": ["trigger_redline_strength", "redline_warning_width"],
             "enable_wheelspin_buzz": ["trigger_wheelspin_gain"],
             "enable_right_road_texture": [],
             "enable_tire_scrub_buzz": [],
@@ -354,6 +356,8 @@ SETTINGS_GROUPS = [
         "title": "⚙️ 엔진 / Engine",
         "description": "[햅틱] RPM·터보·엔진브레이크·아이들. → ⚙️엔진 버스에 속함.",
         "always": [
+            "haptic_redline_warning_strength",
+            "haptic_redline_warning_width",
             "haptic_turbo_spool_strength",
             "haptic_engine_braking_strength",
             "haptic_corner_exit_strength",
@@ -428,7 +432,6 @@ SETTINGS_GROUPS = [
                 "haptic_punch_sustain_blend",
                 "haptic_mastering_sidechain_strength",
                 "haptic_mastering_soft_saturation",
-                "haptic_redline_warning_strength",
             ],
         },
     },
@@ -659,7 +662,7 @@ def default_value_for(key: str):
 # I: 반전 (올리면 약해지는 파라미터 → UI에서 뒤집어 표시)
 
 _REMAP_KEYS = {"brake_static_wall_at", "brake_deadzone", "accel_deadzone"}
-_RATIO_KEYS = {"rev_limit_ratio", "redline_warning_width"}
+_RATIO_KEYS = {"rev_limit_ratio", "redline_warning_width", "haptic_redline_warning_width"}
 _INVERTED_KEYS = {"haptic_fatigue_control"}
 
 

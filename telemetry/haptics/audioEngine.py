@@ -239,6 +239,8 @@ class HapticState:
 
     # extended telemetry fields -- derived from previously-unused Forza data
     rpm_norm: float = 0.0           # 0..1 normalized RPM (idle→max)
+    max_rpm: float = 0.0            # vehicle max RPM (for adaptive redline)
+    idle_rpm: float = 0.0           # vehicle idle RPM
     pitch_rate: float = 0.0         # angular_velocity_x: braking dive / accel squat
     roll_rate: float = 0.0          # angular_velocity_z: cornering roll
     yaw_rate: float = 0.0           # angular_velocity_y: spin/drift rate
@@ -1056,15 +1058,25 @@ class HapticAudioEngine:
                 engine_l += _cet_sig * _cet_amp * _cet_env
                 engine_r += _cet_sig * _cet_amp * _cet_env
 
-        # ── Redline warning: pulse vibration at RPM 90%+ ──
-        if rpm_n >= 0.90:
+        # ── Redline warning: pulse vibration (adaptive threshold) ──
+        _rl_max_rpm = float(getattr(st, "max_rpm", 0.0))
+        _rl_idle_rpm = float(getattr(st, "idle_rpm", 0.0))
+        _rl_width = float(_ga(_settings, "haptic_redline_warning_width", 0.08))
+        if _rl_max_rpm > 0 and _rl_idle_rpm >= 0:
+            _rl_usable = _rl_max_rpm - _rl_idle_rpm
+            _rl_margin = (_rl_usable * _rl_width) / _rl_max_rpm
+            _rl_threshold = max(0.70, 0.93 - _rl_margin)
+        else:
+            _rl_threshold = 0.90
+        _rl_rev_limit = float(_ga(_settings, "rev_limit_ratio", 0.93))
+        if rpm_n >= _rl_threshold:
             _rl_str = _gain(_ga(_settings, "haptic_redline_warning_strength", 0.65), 0.0, 2.0)
             if _rl_str > 0.0:
                 if "redline_warn" not in self._osc:
                     self._osc["redline_warn"] = Osc()
                 # Duck haptic if trigger redline_pulse is also active
-                _rl_duck = 0.5 if (bool(_ga(_settings, "enable_trigger_redline_pulse", True)) and rpm_n >= 0.92) else 1.0
-                _rl_over = min(1.0, (rpm_n - 0.90) / 0.10)  # 0→1 over 90-100%
+                _rl_duck = 0.5 if (bool(_ga(_settings, "enable_trigger_redline_pulse", True)) and rpm_n >= _rl_rev_limit) else 1.0
+                _rl_over = min(1.0, (rpm_n - _rl_threshold) / max(0.01, 1.0 - _rl_threshold))
                 _rl_pulse_freq = 12.0 + _rl_over * 13.0  # 12-25Hz pulse
                 _rl_pulse = pulse_train(frames, sr, _rl_pulse_freq, 0.50)
                 _rl_carrier = self._osc["redline_warn"].sine(frames, sr, 100.0)

@@ -1800,6 +1800,8 @@ def build_state(t, s, now: float | None = None) -> HapticState:
         lateral_g_used=lat_g,
         # extended telemetry
         rpm_norm=rpm_norm,
+        max_rpm=max_rpm,
+        idle_rpm=idle_rpm,
         pitch_rate=pitch_rate,
         roll_rate=roll_rate,
         yaw_rate=yaw_rate,
