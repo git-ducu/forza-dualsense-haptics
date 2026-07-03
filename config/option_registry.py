@@ -236,6 +236,9 @@ ADVANCED_SECTIONS = [
                    "레드라인 근처에서 R2가 딱딱해지며 펄스로 밀어냄 (진동과 다른 저항감)."),
         OptionSpec("trigger_redline_strength", "Redline trigger strength", "레드라인 트리거 세기", "Engine", 0.3, 2.0, 0.01, "advanced", "safe", "trigger",
                    "▼ Lower: subtle. ▲ Higher: stronger R2 redline pulse.", "▼ 낮추면: 약하게. ▲ 높이면: R2 레드라인 저항 강하게."),
+        OptionSpec("redline_warning_width", "Redline warning zone width", "레드라인 경고 구간 폭", "Engine", 0.03, 0.20, 0.01, "advanced", "safe", "trigger",
+                   "Fraction of usable RPM range for early warning. Higher = earlier warning for low-rev cars.",
+                   "사용 가능 RPM 범위 대비 경고 구간 비율. 높이면 저출력 차에서 더 일찍 경고."),
         OptionSpec("enable_trigger_engine_brake", "L2 engine brake resistance", "L2 엔진 브레이크 저항", "Engine", None, None, None, "advanced", "safe", "trigger",
                    "L2 feels heavier when engine braking at high RPM.", "고RPM에서 스로틀 오프 시 L2가 약간 무거워짐."),
         OptionSpec("trigger_engine_brake_strength", "Engine brake trigger strength", "엔진브레이크 트리거 세기", "Engine", 0.3, 2.0, 0.01, "advanced", "safe", "trigger",
@@ -656,7 +659,7 @@ def default_value_for(key: str):
 # I: 반전 (올리면 약해지는 파라미터 → UI에서 뒤집어 표시)
 
 _REMAP_KEYS = {"brake_static_wall_at", "brake_deadzone", "accel_deadzone"}
-_RATIO_KEYS = {"rev_limit_ratio"}
+_RATIO_KEYS = {"rev_limit_ratio", "redline_warning_width"}
 _INVERTED_KEYS = {"haptic_fatigue_control"}
 
 

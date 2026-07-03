@@ -3,6 +3,7 @@
 # Owns the UDP socket. Decoding and effect computation happen elsewhere.
 
 from __future__ import annotations
+import errno
 import logging
 import socket
 import time
@@ -12,6 +13,11 @@ from .relay import UDPForwarder
 log = logging.getLogger("dhe.receiver")
 
 EXPECTED_PACKET_SIZE = 324
+
+# Periodic rate logging interval (seconds)
+_RATE_LOG_INTERVAL = 10.0
+# Telemetry timeout threshold (seconds)
+_TELEMETRY_TIMEOUT = 5.0
 
 
 class TelemetryReceiver:
@@ -36,6 +42,12 @@ class TelemetryReceiver:
         self.packetCount: int = 0
         self.badPacketCount: int = 0
 
+        # rate tracking
+        self._rateWindowStart: float = 0.0
+        self._rateWindowCount: int = 0
+        self._firstPacketLogged: bool = False
+        self._timeoutLogged: bool = False
+
     # ── Context manager ─────────────────────────────────────────────────────
 
     def __enter__(self) -> "TelemetryReceiver":
@@ -49,6 +61,7 @@ class TelemetryReceiver:
         if self._sock is None:
             raise OSError(f"cannot bind UDP port {self._port} (in use or invalid host {self._host!r})")
         self._sock.settimeout(self._timeout)
+        self._rateWindowStart = time.time()
         self._fwd.open()
         return self
 
@@ -95,6 +108,27 @@ class TelemetryReceiver:
         self.lastPacketTime = time.time()
         self.packetCount += 1
 
+        # First valid packet notification
+        if not self._firstPacketLogged:
+            self._firstPacketLogged = True
+            self._timeoutLogged = False
+            log.info("First telemetry packet received from %s:%d (%d bytes)",
+                     addr[0], addr[1], len(pkt))
+
+        # Periodic packet rate logging
+        self._rateWindowCount += 1
+        now = time.time()
+        elapsed = now - self._rateWindowStart
+        if elapsed >= _RATE_LOG_INTERVAL:
+            rate = self._rateWindowCount / elapsed
+            log.info("Telemetry rate: %.1f packets/sec (total: %d, bad: %d)",
+                     rate, self.packetCount, self.badPacketCount)
+            self._rateWindowStart = now
+            self._rateWindowCount = 0
+
+        # Reset timeout flag on successful receipt
+        self._timeoutLogged = False
+
         # validate size
         if len(pkt) != EXPECTED_PACKET_SIZE:
             self.badPacketCount += 1
@@ -117,7 +151,7 @@ class TelemetryReceiver:
             s.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
             s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4096)
             s.bind(("::", self._port))
-            log.info("UDP listening on [::]:%d (IPv4+IPv6)", self._port)
+            log.info("UDP bind success: [::]:%d (IPv4+IPv6)", self._port)
             return s
         except OSError as e:
             log.debug("dual-stack bind failed, falling back: %s", e)
@@ -131,10 +165,18 @@ class TelemetryReceiver:
             except OSError:
                 pass
             s.bind((self._host, self._port))
-            log.info("UDP listening on %s:%d (IPv4)", self._host, self._port)
+            log.info("UDP bind success: %s:%d (IPv4)", self._host, self._port)
             return s
         except OSError as e:
-            log.warning("IPv4 bind on %s:%d failed: %s", self._host, self._port, e)
+            err_code = getattr(e, 'errno', None) or (e.args[0] if e.args else None)
+            if err_code == errno.EADDRINUSE or err_code == 10048:
+                log.error("UDP bind FAILED on %s:%d — port already in use. "
+                          "Another DHE instance or telemetry app may be running. "
+                          "Close other apps using port %d and retry.",
+                          self._host, self._port, self._port)
+            else:
+                log.error("UDP bind FAILED on %s:%d — OS error: %s (errno=%s)",
+                          self._host, self._port, e, err_code)
             return None
 
     def _reconnect(self) -> bool:
@@ -158,3 +200,38 @@ class TelemetryReceiver:
         self._consecutiveErrors = 0
         log.info("UDP reconnected on port %d", self._port)
         return True
+
+    # ── Timeout detection ───────────────────────────────────────────────────
+
+    def checkTimeout(self) -> bool:
+        """Returns True if no valid packet received for _TELEMETRY_TIMEOUT seconds.
+        Logs a warning once per timeout event."""
+        if self.lastPacketTime == 0.0:
+            return False
+        elapsed = time.time() - self.lastPacketTime
+        if elapsed >= _TELEMETRY_TIMEOUT:
+            if not self._timeoutLogged:
+                self._timeoutLogged = True
+                log.warning("Telemetry timeout: no valid packet for %.1fs. "
+                            "Check Forza Data Out settings (IP=%s, Port=%d).",
+                            elapsed, self._host, self._port)
+            return True
+        return False
+
+    # ── Static test helper ──────────────────────────────────────────────────
+
+    @staticmethod
+    def testBind(host: str, port: int) -> tuple[bool, str]:
+        """Try binding to the given host:port and immediately release.
+        Returns (success, message)."""
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.bind((host, port))
+            s.close()
+            return True, f"UDP port {port} is available on {host}"
+        except OSError as e:
+            err_code = getattr(e, 'errno', None) or (e.args[0] if e.args else None)
+            if err_code == errno.EADDRINUSE or err_code == 10048:
+                return False, (f"UDP port {port} is already in use. "
+                               "Another DHE instance or telemetry app may be running.")
+            return False, f"UDP bind failed on {host}:{port} — {e}"

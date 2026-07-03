@@ -13,9 +13,13 @@ if not exist "dist\DHE" (
     exit /b 1
 )
 
-set "ZIP_NAME=DHE_v1.00.zip"
+set "ZIP_NAME=DHE_v1.02.zip"
 
 if exist "%ZIP_NAME%" del "%ZIP_NAME%"
+
+echo Copying helper batch files to dist...
+copy /y "DHE_SelfTest.bat" "dist\DHE\" >nul 2>nul
+copy /y "DHE_ExportDiagnostics.bat" "dist\DHE\" >nul 2>nul
 
 echo Creating %ZIP_NAME%...
 powershell -Command "Compress-Archive -Path 'dist\DHE\*' -DestinationPath '%ZIP_NAME%' -Force"

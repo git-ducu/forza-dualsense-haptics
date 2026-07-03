@@ -106,12 +106,60 @@ def _confirm(prompt: str) -> bool:
 
 
 def main():
-    p = argparse.ArgumentParser(description="DHE — telemetry haptic engine")
+    p = argparse.ArgumentParser(
+        description="DHE — DualSense haptic engine for Forza telemetry",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""\
+Commands:
+  --self-test            Run controller and port diagnostics, then exit
+  --export-diagnostics   Create diagnostic files for GitHub Issues, then exit
+  --help                 Show this help message
+
+Normal usage:
+  Double-click DHE.exe or run without arguments to start the haptic engine.
+  Use DHE_SelfTest.bat or DHE_ExportDiagnostics.bat for easy access.
+""")
     p.add_argument("--host", default=None, help="UDP bind address")
     p.add_argument("--port", type=int, default=None, help="UDP port")
     p.add_argument("--debug", action="store_true", help="Verbose per-packet logs")
     p.add_argument("--headless", action="store_true", help="Disable UI, use console logs")
+    p.add_argument("--self-test", action="store_true", dest="self_test",
+                   help="Run controller and port self-test, then exit")
+    p.add_argument("--export-diagnostics", action="store_true", dest="export_diagnostics",
+                   help="Export diagnostic files for GitHub Issues, then exit")
     args = p.parse_args()
+
+    # Handle special commands before loading full settings
+    if args.self_test:
+        setup_logging(False)
+        from runtime.selftest import run_self_test
+        settings = Settings()
+        try:
+            preferences.load(settings)
+        except Exception:
+            pass
+        if args.port is not None:
+            settings.udp_port = args.port
+        if args.host is not None:
+            settings.udp_host = args.host
+        sys.exit(run_self_test(settings))
+
+    if args.export_diagnostics:
+        setup_logging(False)
+        from runtime.diagnostics import export_diagnostic_bundle
+        settings = Settings()
+        try:
+            preferences.load(settings)
+        except Exception:
+            pass
+        try:
+            path = export_diagnostic_bundle(settings)
+            print(f"\nDiagnostic bundle created:\n  {path}")
+            print("\nAttach this file to your GitHub Issue for support.")
+            sys.exit(0)
+        except Exception as e:
+            print(f"\n[FAIL] Diagnostic export failed: {e}", file=sys.stderr)
+            sys.exit(1)
 
     settings = Settings()
     try:

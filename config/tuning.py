@@ -82,6 +82,7 @@ class ThrottleTuning:
     # redline pulse
     enableRedlinePulse: bool = True
     redlinePulseStrength: float = 1.0
+    redlineWarningWidth: float = 0.08  # fraction of usable RPM range for warning zone
     # wheelspin
     enableWheelSpin: bool = True
     wheelSpinBaseAmplitude: int = 27
@@ -308,6 +309,7 @@ def sync_tuning_from_settings(tuning: Tuning, s) -> None:
     th.revLimiterStrength = float(getattr(s, "rev_limiter_strength", th.revLimiterStrength))
     th.enableRedlinePulse = bool(getattr(s, "enable_trigger_redline_pulse", th.enableRedlinePulse))
     th.redlinePulseStrength = float(getattr(s, "trigger_redline_strength", th.redlinePulseStrength))
+    th.redlineWarningWidth = float(getattr(s, "redline_warning_width", th.redlineWarningWidth))
     th.enableWheelSpin = bool(getattr(s, "enable_wheelspin_buzz", th.enableWheelSpin))
     th.wheelSpinBaseAmplitude = int(getattr(s, "wheelspin_amp", th.wheelSpinBaseAmplitude))
     th.enableRoadTexture = bool(getattr(s, "enable_right_road_texture", th.enableRoadTexture))

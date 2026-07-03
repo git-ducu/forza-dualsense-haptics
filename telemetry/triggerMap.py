@@ -125,8 +125,11 @@ def detectGearShift(vs: VehicleState, mem: EffectMemory, tuning, now: float):
 
 
 def produceShiftKickEffect(mem: EffectMemory, tuning, now: float,
-                           sideGain: float = 1.0) -> TriggerEffect | None:
-    # Produces a multi-phase rigid "clack" sequence during shift window
+                           sideGain: float = 1.0,
+                           pedalValue: int = 0) -> TriggerEffect | None:
+    # Produces a multi-phase shift effect.
+    # At low pedal travel (<50%): rigid "clack" zone feedback (mechanical lock feel).
+    # At high pedal travel (>=50%): vibration burst (felt regardless of position).
     if now >= mem.shiftKickUntil:
         return None
     if sideGain <= 0.0:
@@ -136,6 +139,30 @@ def produceShiftKickEffect(mem: EffectMemory, tuning, now: float,
     load = max(mem.shiftAccelNorm, mem.shiftBrakeNorm, mem.shiftRpmNorm)
     masterGain = min(3.65, tuning.shiftKickGain * 1.3)
 
+    # Pedal depth ratio (0.0 ~ 1.0). Above threshold → vibration mode.
+    pedalRatio = min(1.0, max(0.0, pedalValue / 255.0))
+    useVibration = pedalRatio >= 0.45
+
+    if useVibration:
+        # Vibration burst mode: felt at any trigger depth.
+        # Stronger vibration for higher masterGain; frequency gives "clack" character.
+        baseAmp = max(3, min(8, int(7 * masterGain * sideGain)))
+        if elapsed < 0.032:
+            # Phase 1: sharp initial buzz
+            return buildZoneVibration([baseAmp] * 10, 90)
+        if elapsed < 0.058:
+            # Phase 2: torque-cut dip
+            cutGain = min(1.80, tuning.shiftTorqueCutGain)
+            amp2 = max(2, min(7, int(5 * cutGain * sideGain)))
+            return buildZoneVibration([amp2] * 10, 60)
+        if elapsed < 0.090:
+            # Phase 3: secondary clack buzz
+            clackGain = min(3.25, tuning.shiftClackGain * 1.3)
+            amp3 = max(3, min(8, int(7 * clackGain * masterGain * sideGain)))
+            return buildZoneVibration([amp3] * 10, 90)
+        return None
+
+    # Zone feedback mode: mechanical lock feel at low pedal travel.
     # Phase 1: initial selector click → hard rigid lock (0..32ms)
     if elapsed < 0.032:
         lockStrength = max(4, min(8, int(8 * masterGain * sideGain)))
@@ -219,7 +246,15 @@ def computeRedlinePulse(vs: VehicleState, tuning, now: float) -> TriggerEffect |
         return None
     rpmNorm = vs.rpmRatio
     revThreshold = tuning.revLimiterThreshold     # e.g. 0.93
-    warningStart = 0.92
+
+    # Dynamic warningStart based on usable RPM range.
+    # Wider usable range → warning starts closer to threshold (high-rev cars).
+    # Narrower usable range → warning starts earlier (low-rev cars).
+    usableRange = vs.maxRpm - vs.idleRpm
+    warningWidth = tuning.redlineWarningWidth  # fraction of usable range
+    warningMarginRatio = (usableRange * warningWidth) / vs.maxRpm if vs.maxRpm > 0 else 0.05
+    warningStart = max(0.70, revThreshold - warningMarginRatio)
+
     if rpmNorm < warningStart or rpmNorm >= revThreshold:
         return None  # above threshold → rev limiter owns it
     overband = min(1.0, (rpmNorm - warningStart) / max(0.01, revThreshold - warningStart))
@@ -511,7 +546,7 @@ def _resolveBrakeTrigger(vs: VehicleState, mem: EffectMemory,
     """
     # 1. Gear shift kick — brief burst masks everything
     if tuning.enableGearShiftBrake:
-        shiftEffect = produceShiftKickEffect(mem, tuning, now, sideGain=0.55)
+        shiftEffect = produceShiftKickEffect(mem, tuning, now, sideGain=0.55, pedalValue=vs.brake)
         if shiftEffect is not None:
             return shiftEffect, "shift"
 
@@ -558,7 +593,7 @@ def _resolveThrottleTrigger(vs: VehicleState, mem: EffectMemory,
     """
     # 1. Gear shift kick
     if tuning.enableGearShift:
-        shiftEffect = produceShiftKickEffect(mem, tuning, now, sideGain=1.0)
+        shiftEffect = produceShiftKickEffect(mem, tuning, now, sideGain=1.0, pedalValue=vs.throttle)
         if shiftEffect is not None:
             return shiftEffect, "shift"
 

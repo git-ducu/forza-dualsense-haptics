@@ -17,6 +17,7 @@ data/user_preferences.json
 data/user_preferences.json.*
 !data/user_preferences.json.default
 data/diagnostics/
+diagnostics/
 data/haptic_telemetry_record.jsonl
 
 # Vendor (too large for git — distributed in release zip)

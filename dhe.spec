@@ -66,6 +66,7 @@ a = Analysis(
         "runtime.factory",
         "runtime.logSetup",
         "runtime.diagnostics",
+        "runtime.selftest",
         "ui",
         "ui.app",
         "ui.bridge",

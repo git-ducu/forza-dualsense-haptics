@@ -299,6 +299,7 @@ class Settings:
     # Engine enhancement - trigger effects
     enable_trigger_redline_pulse: bool = True     # R2 레드라인 경고 펄스
     trigger_redline_strength: float = 1.0
+    redline_warning_width: float = 0.08           # usable RPM range 대비 경고 구간 폭
     enable_trigger_engine_brake: bool = False      # L2 엔진 브레이킹 저항 (기본 OFF: 급브레이크 방해)
     trigger_engine_brake_strength: float = 0.7
     adaptive_acceleration_depth: float = 0.30
