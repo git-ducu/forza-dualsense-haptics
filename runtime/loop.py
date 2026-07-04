@@ -200,6 +200,7 @@ def run(ds: "DualSenseWriter", listener: "TelemetryReceiver", s: "Settings", sto
     last_haptic_log = 0.0
     last_haptic_record = 0.0
     last_tuning_sync = 0.0
+    last_trigger_error_log = 0.0
     pkt_count = 0
 
     watcher = ProcessWatcher(s.game_process_name_contains, s.game_poll_interval_s)
@@ -270,7 +271,9 @@ def run(ds: "DualSenseWriter", listener: "TelemetryReceiver", s: "Settings", sto
                 frame = computeTriggerFrame(vs, mem, tuning, now, t, s)
                 left, right = frame.left, frame.right
             except Exception as e:
-                log.warning("computeTriggerFrame failed: %s", e)
+                if now - last_trigger_error_log > 1.0:
+                    log.warning("computeTriggerFrame failed: %s", e)
+                    last_trigger_error_log = now
                 left, right = clearEffect(), clearEffect()
                 frame = TriggerFrame(left, right, "off", "off")
 
