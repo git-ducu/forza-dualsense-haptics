@@ -50,7 +50,7 @@ run_dhe.bat        # 실행 / run
 ```bash
 pip install pyinstaller
 build.bat          # → dist/DHE/DHE.exe
-release.bat        # → DHE_v1.02.zip
+release.bat        # → DHE_vX.YY.zip
 ```
 
 ---

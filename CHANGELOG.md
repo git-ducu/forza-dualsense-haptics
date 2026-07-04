@@ -16,7 +16,7 @@
 - Updated release package version
 
 ### Notes
-- **R2 throttle, wheelspin, and drift feel has changed from v1.02.** The priority chain is now: gear shift > idle > redline > rev limiter > slip onset > wheelspin > end-stop wall > throttle resistance.
+- **R2 throttle, wheelspin, and drift behavior changed from v1.02.** The priority chain is now: gear shift > idle > redline > rev limiter > slip onset > wheelspin > end-stop wall > throttle resistance.
 - L2 priority: gear shift > ABS > engine brake > road texture > end-stop wall > brake resistance.
 
 ## v1.02
