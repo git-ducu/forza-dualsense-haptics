@@ -22,13 +22,21 @@ UI 미노출, gain 1.0 고정, 기존 haptic balance 인식 가능 수준 유지
 
 | Bus | 담당 영역 | 소스 예시 |
 |-----|-----------|-----------|
-| SURFACE | 노면 물리 텍스처 | road_texture, kerb, gravel, dirt, wet_surface |
-| TIRE | 타이어 동적 피드백 | wheelspin, tire_scrub, asphalt_grip (traction edge) |
-| VEHICLE | 차체 동역학/관성 | weight_transfer, slide, drift, rear_breakaway |
+| SURFACE | 노면 질감/아스팔트 표면감 | road_texture, kerb, gravel, dirt, wet_surface |
+| TIRE | 타이어 접지/슬립/마찰 느낌 | wheelspin, tire_scrub, asphalt_grip (traction edge) |
+| VEHICLE | 차체 안정감/로드 피드백 | weight_transfer, slide, drift, rear_breakaway |
 | ENGINE | 파워트레인 | RPM, redline, turbo, drivetrain |
 | EVENT | 일회성 임팩트 | gear shift, collision, bump, landing |
 
-구분 원칙: SURFACE = 노면이 타이어에 주는 것, TIRE = 타이어가 한계에서 내는 것, VEHICLE = 차체가 관성으로 보여주는 것.
+구분 원칙:
+- **SURFACE** = 노면 질감/아스팔트 표면감 (노면이 타이어에 주는 것)
+- **TIRE** = 타이어 접지/슬립/마찰 느낌 (타이어가 한계에서 내는 것)
+- **VEHICLE** = 차체 안정감/로드 피드백 (차체가 관성으로 보여주는 것)
+- **ENGINE** = 파워트레인 진동
+- **EVENT** = 일회성 임팩트
+
+`asphalt_grip`은 이름과 달리 slip_angle + combined_slip 기반 타이어 트랙션 엣지 신호이므로 TIRE에 배치.
+노면 재질 질감 (아스팔트 vs 콘크리트 표면 텍스처 등)은 SURFACE.
 
 ---
 
@@ -96,16 +104,21 @@ UI 미노출, gain 1.0 고정, 기존 haptic balance 인식 가능 수준 유지
 - EVENT: 제한 없음 (다만 punch_to_mid_ratio guard 있음)
 
 **TIRE ducking 정책:**
+
+> TIRE bus is mostly transparent.
+> No strong ducking by default.
+> EVENT clarity protection may apply via soft sidechain or limiter interaction.
+
 - TIRE는 기본적으로 ducking 대상 아님 (VEHICLE과 동일 취급)
 - 이유: 이전에 VEHICLE에 있었으므로 duck 안 됨이 기존 동작
-- EVENT 발생 시 TIRE 자체는 duck되지 않으나, TIRE가 EVENT를 묻히게 할 정도로 강하면 HF shimmer cap에 의해 간접 제한됨
+- EVENT 발생 시 TIRE 자체는 duck되지 않으나, EVENT clarity protection이 soft sidechain 또는 limiter interaction으로 간접 적용될 수 있음
 - 미래: v1.05+에서 필요하면 경량 limiter interaction 추가 가능
 
 정리:
 - ✅ TIRE는 EVENT sidechain에서 제외 (VEHICLE과 동일)
 - ✅ TIRE는 mid protection 대상 아님 (continuous만 해당)
 - ✅ `other_rms`에 tire_rms 포함 → HF shimmer cap 계산에 참여
-- ✅ EVENT가 매우 강할 때 tire가 간접적으로 제한될 수 있음 (설계 의도)
+- ✅ EVENT clarity protection이 soft sidechain/limiter로 간접 적용 가능 (설계 의도)
 
 ### Soft saturation
 - `tire_rms > 0.45` → `k_tire = 1.0 + drive * 0.8` (VEHICLE 수준)
@@ -215,13 +228,15 @@ UI 미노출, gain 1.0 고정, 기존 haptic balance 인식 가능 수준 유지
 
 ## 미포함 (v1.05+)
 
-- ❌ Spatial L/R tire biasing (per-wheel 좌우 분리) → v1.05
-- ❌ Cornering lateral force haptic → v1.05
-- ❌ Haptic drift fade (bus-level) → v1.05+
-- ❌ TIRE bus gain UI 노출 → v1.10
-- ❌ Redline pulse 개선 → v1.05
-- ❌ Surface transition smoothing → v1.05
-- ❌ Per-source limiter / loudness normalization → v1.10+
+- ❌ Spatial L/R tire biasing (per-wheel 좌우 분리)
+- ❌ Cornering lateral force haptic
+- ❌ Haptic drift fade (bus-level)
+- ❌ TIRE bus gain UI 노출
+- ❌ Redline pulse 개선
+- ❌ Surface transition smoothing
+- ❌ Per-source limiter / loudness normalization
+
+v1.05~v1.10 범위에서 필요한 만큼만 자연 분리. 미리 버전 고정하지 않음.
 
 ---
 
@@ -278,10 +293,10 @@ UI 미노출, gain 1.0 고정, 기존 haptic balance 인식 가능 수준 유지
 
 | 버전 | 내용 | 성격 |
 |------|------|------|
-| v1.03 | 트리거 3기능 (Predictive ABS, Throttle Traction, Drift Fade) + hotfix | 기능 릴리즈 |
-| **v1.04** | **TIRE bus 내부 추가 + per-bus 진단** | 인프라 / 내부 구조 |
-| v1.05 | Spatial L/R tire bias + cornering lateral haptic + redline polish | 햅틱 공간감 |
-| v1.10 | TIRE gain UI 노출 + bus-level drift fade + loudness normalization | 마스터링 고도화 |
+| v1.03 | P0 안정성 패치 + 릴리즈 | 핫픽스 릴리즈 |
+| **v1.04** | **TIRE bus 최소 구현 + per-bus 진단** | 인프라 / 내부 구조 |
+| v1.05~v1.10 | 기능 확장 중 필요한 만큼만 자연 분리 | 기능 확장 |
+| v1.10 이후 | 큰 리팩토링 판단 | 구조 개선 |
 
 v1.04는 **소규모 인프라 릴리즈**로 유지:
 - 유저 체감: 거의 동일 (미세 개선 가능)
