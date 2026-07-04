@@ -185,7 +185,7 @@ def _write_haptic_record(t: dict, st: HapticState, now: float, render_stats: dic
 def run(ds: "DualSenseWriter", listener: "TelemetryReceiver", s: "Settings", stop_event: Event | None = None, telemetry_sink=None) -> None:
     """Main driving loop: receives telemetry, updates triggers, runs haptic engine."""
     from dsio.trigger.effects import clearEffect
-    from telemetry.triggerMap import computeTriggerFrame, EffectMemory
+    from telemetry.triggerMap import computeTriggerFrame, EffectMemory, TriggerFrame
     from config.tuning import Tuning, sync_tuning_from_settings
     OFF = clearEffect()
     mem = EffectMemory()
@@ -265,13 +265,14 @@ def run(ds: "DualSenseWriter", listener: "TelemetryReceiver", s: "Settings", sto
                 log.warning("Bad packet from %s:%d (%d bytes): %s", addr[0], addr[1], len(pkt), e)
                 continue
 
-            # MARK: never let a trigger logic bug kill the loop - log & skip frame
+            # MARK: never let a trigger logic bug kill the loop - fail-safe OFF/OFF
             try:
                 frame = computeTriggerFrame(vs, mem, tuning, now, t, s)
                 left, right = frame.left, frame.right
             except Exception as e:
                 log.warning("computeTriggerFrame failed: %s", e)
-                continue
+                left, right = clearEffect(), clearEffect()
+                frame = TriggerFrame(left, right, "off", "off")
 
             # MARK: optional audio-haptic output path. Failure must not affect triggers.
             hst = None
@@ -294,12 +295,15 @@ def run(ds: "DualSenseWriter", listener: "TelemetryReceiver", s: "Settings", sto
 
             # Feed live telemetry + bus levels to GUI (after haptic so render_stats is ready)
             if telemetry_sink is not None:
-                if render_stats:
-                    t["_bus_surface"] = render_stats.get("mix_surface_mid_rms", 0)
-                    t["_bus_vehicle"] = render_stats.get("mix_vehicle_rms", 0)
-                    t["_bus_engine"] = render_stats.get("mix_engine_rms", 0)
-                    t["_bus_event"] = render_stats.get("mix_event_rms", 0)
-                telemetry_sink(t)
+                try:
+                    if render_stats:
+                        t["_bus_surface"] = render_stats.get("mix_surface_mid_rms", 0)
+                        t["_bus_vehicle"] = render_stats.get("mix_vehicle_rms", 0)
+                        t["_bus_engine"] = render_stats.get("mix_engine_rms", 0)
+                        t["_bus_event"] = render_stats.get("mix_event_rms", 0)
+                    telemetry_sink(t)
+                except Exception as e:
+                    log.debug("telemetry_sink failed: %s", e)
 
             try:
                 diagnostics.record_runtime_sample(s, t, hst, render_stats, frame)
