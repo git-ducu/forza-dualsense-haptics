@@ -16,8 +16,6 @@ EXPECTED_PACKET_SIZE = 324
 
 # Periodic rate logging interval (seconds)
 _RATE_LOG_INTERVAL = 10.0
-# Telemetry timeout threshold (seconds)
-_TELEMETRY_TIMEOUT = 5.0
 
 
 class TelemetryReceiver:
@@ -46,7 +44,6 @@ class TelemetryReceiver:
         self._rateWindowStart: float = 0.0
         self._rateWindowCount: int = 0
         self._firstPacketLogged: bool = False
-        self._timeoutLogged: bool = False
 
     # ── Context manager ─────────────────────────────────────────────────────
 
@@ -105,14 +102,23 @@ class TelemetryReceiver:
             self._sock.setblocking(True)
             self._sock.settimeout(self._timeout)
 
+        # Validate size BEFORE updating any valid-packet state
+        if len(pkt) != EXPECTED_PACKET_SIZE:
+            self.badPacketCount += 1
+            if len(pkt) not in self._warnedSizes:
+                self._warnedSizes.add(len(pkt))
+                log.warning("dropped datagram: size=%d peer=%s:%d required=%d",
+                            len(pkt), addr[0], addr[1], EXPECTED_PACKET_SIZE)
+            return None, None
+
+        # ── Valid packet ────────────────────────────────────────────────────
         self.lastPacketTime = time.time()
         self.packetCount += 1
 
         # First valid packet notification
         if not self._firstPacketLogged:
             self._firstPacketLogged = True
-            self._timeoutLogged = False
-            log.info("First telemetry packet received from %s:%d (%d bytes)",
+            log.info("First valid telemetry packet received from %s:%d (%d bytes)",
                      addr[0], addr[1], len(pkt))
 
         # Periodic packet rate logging
@@ -126,17 +132,6 @@ class TelemetryReceiver:
             self._rateWindowStart = now
             self._rateWindowCount = 0
 
-        # Reset timeout flag on successful receipt
-        self._timeoutLogged = False
-
-        # validate size
-        if len(pkt) != EXPECTED_PACKET_SIZE:
-            self.badPacketCount += 1
-            if len(pkt) not in self._warnedSizes:
-                self._warnedSizes.add(len(pkt))
-                log.warning("dropped datagram: size=%d peer=%s:%d required=%d",
-                            len(pkt), addr[0], addr[1], EXPECTED_PACKET_SIZE)
-            return None, None
         return pkt, addr
 
     # legacy alias for transition period
@@ -200,23 +195,6 @@ class TelemetryReceiver:
         self._consecutiveErrors = 0
         log.info("UDP reconnected on port %d", self._port)
         return True
-
-    # ── Timeout detection ───────────────────────────────────────────────────
-
-    def checkTimeout(self) -> bool:
-        """Returns True if no valid packet received for _TELEMETRY_TIMEOUT seconds.
-        Logs a warning once per timeout event."""
-        if self.lastPacketTime == 0.0:
-            return False
-        elapsed = time.time() - self.lastPacketTime
-        if elapsed >= _TELEMETRY_TIMEOUT:
-            if not self._timeoutLogged:
-                self._timeoutLogged = True
-                log.warning("Telemetry timeout: no valid packet for %.1fs. "
-                            "Check Forza Data Out settings (IP=%s, Port=%d).",
-                            elapsed, self._host, self._port)
-            return True
-        return False
 
     # ── Static test helper ──────────────────────────────────────────────────
 

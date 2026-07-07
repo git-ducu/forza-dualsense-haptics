@@ -303,6 +303,21 @@ class Settings:
     enable_trigger_engine_brake: bool = False      # L2 엔진 브레이킹 저항 (기본 OFF: 급브레이크 방해)
     trigger_engine_brake_strength: float = 0.7
     adaptive_acceleration_depth: float = 0.30
+
+    # MARK: Driving feedback (v1.03)
+    # Predictive ABS — L2 저항 증가 + 슬립 시 펄스
+    predictive_abs_enabled: bool = True
+    predictive_abs_strength: float = 0.6          # 0.0–1.5
+    predictive_abs_slip_threshold: float = 0.25   # tireCombinedSlip 기준
+    # Throttle traction — R2 저항 변화로 그립 상실 전달
+    throttle_traction_enabled: bool = True
+    throttle_traction_strength: float = 0.5       # 0.0–1.5
+    throttle_traction_slip_threshold: float = 0.30  # driven wheel slip 기준
+    # Drift fade — 드리프트 중 traction/wheelspin 노이즈 감쇄
+    drift_fade_enabled: bool = True
+    drift_fade_strength: float = 0.3              # 0.0–1.0 (낮을수록 더 감쇄)
+    drift_fade_min_speed_kmh: float = 40.0        # 이 속도 이상에서만 판정
+
     suspension_bump_strength: float = 0.80    # was 0.55; bumps were barely felt
     suspension_bump_sensitivity: float = 1.0
     r2_effect_priority_mode: str = "balanced"  # balanced / clean / texture / grip

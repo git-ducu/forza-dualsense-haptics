@@ -53,6 +53,10 @@ class BrakeTuning:
     # engine brake on L2
     enableEngineBrake: bool = True
     engineBrakeStrength: float = 0.5
+    # predictive ABS
+    enablePredictiveAbs: bool = True
+    predictiveAbsStrength: float = 0.6
+    predictiveAbsSlipThreshold: float = 0.25
     # brake gain multiplier
     brakeGain: float = 1.0
     # road texture on brake trigger
@@ -88,6 +92,14 @@ class ThrottleTuning:
     wheelSpinBaseAmplitude: int = 27
     wheelSpinSlipThreshold: float = 0.5
     wheelSpinSaturation: float = 3.0
+    # throttle traction resistance
+    enableThrottleTraction: bool = True
+    throttleTractionStrength: float = 0.5
+    throttleTractionSlipThreshold: float = 0.30
+    # drift fade (attenuates traction/wheelspin during sustained drift)
+    enableDriftFade: bool = True
+    driftFadeStrength: float = 0.3
+    driftFadeMinSpeedKmh: float = 40.0
     enableRoadTexture: bool = True
     enablePositionedVibration: bool = True
     enableTireScrub: bool = True
@@ -287,6 +299,9 @@ def sync_tuning_from_settings(tuning: Tuning, s) -> None:
     b.absStrength = float(getattr(s, "abs_strength", b.absStrength))
     b.enableEngineBrake = bool(getattr(s, "enable_trigger_engine_brake", b.enableEngineBrake))
     b.engineBrakeStrength = float(getattr(s, "trigger_engine_brake_strength", b.engineBrakeStrength))
+    b.enablePredictiveAbs = bool(getattr(s, "predictive_abs_enabled", b.enablePredictiveAbs))
+    b.predictiveAbsStrength = float(getattr(s, "predictive_abs_strength", b.predictiveAbsStrength))
+    b.predictiveAbsSlipThreshold = float(getattr(s, "predictive_abs_slip_threshold", b.predictiveAbsSlipThreshold))
     b.brakeGain = float(getattr(s, "trigger_brake_gain", b.brakeGain))
     b.enableRoadTexture = bool(getattr(s, "enable_left_road_texture", b.enableRoadTexture))
 
@@ -312,6 +327,12 @@ def sync_tuning_from_settings(tuning: Tuning, s) -> None:
     th.redlineWarningWidth = float(getattr(s, "redline_warning_width", th.redlineWarningWidth))
     th.enableWheelSpin = bool(getattr(s, "enable_wheelspin_buzz", th.enableWheelSpin))
     th.wheelSpinBaseAmplitude = int(getattr(s, "wheelspin_amp", th.wheelSpinBaseAmplitude))
+    th.enableThrottleTraction = bool(getattr(s, "throttle_traction_enabled", th.enableThrottleTraction))
+    th.throttleTractionStrength = float(getattr(s, "throttle_traction_strength", th.throttleTractionStrength))
+    th.throttleTractionSlipThreshold = float(getattr(s, "throttle_traction_slip_threshold", th.throttleTractionSlipThreshold))
+    th.enableDriftFade = bool(getattr(s, "drift_fade_enabled", th.enableDriftFade))
+    th.driftFadeStrength = float(getattr(s, "drift_fade_strength", th.driftFadeStrength))
+    th.driftFadeMinSpeedKmh = float(getattr(s, "drift_fade_min_speed_kmh", th.driftFadeMinSpeedKmh))
     th.enableRoadTexture = bool(getattr(s, "enable_right_road_texture", th.enableRoadTexture))
     th.enablePositionedVibration = bool(getattr(s, "enable_trigger_positioned_vibration", th.enablePositionedVibration))
     th.enableTireScrub = bool(getattr(s, "enable_tire_scrub_buzz", th.enableTireScrub))

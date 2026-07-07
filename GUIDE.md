@@ -376,7 +376,21 @@ If Game Pass Forza doesn't recognize your DualSense, use an XInput mapper.
 - DSX, DS4Windows, DualSenseY 등을 사용하면 DualSense를 Xbox 컨트롤러로 인식시킬 수 있습니다.
   Use tools like DSX, DS4Windows, or DualSenseY to map DualSense as an Xbox controller.
 
-### 햅틱 오디오가 작동하지 않을 때 / Haptic audio not working
+> **DHE 호환성 참고 / DHE Compatibility Note**:
+> 일부 에뮬레이터가 DualSense HID를 독점하면 DHE가 햅틱/트리거에 접근하지 못할 수 있습니다.
+> Some emulators may take exclusive HID access, preventing DHE from outputting haptics/triggers.
+>
+> - **DualSenseY**: DHE와 함께 작동한다는 사용자 보고 있음 (Forza가 Xbox로 인식 + DHE 햅틱/트리거 동시 동작)
+>   Reported to work alongside DHE (Forza sees Xbox controller while DHE retains haptic/trigger output)
+> - **DSX**: 일부 환경에서 DHE가 DualSense에 접근 불가할 수 있음
+>   May block DHE from accessing DualSense in some configurations
+>
+> DHE가 컨트롤러를 감지하지 못하면:
+> If DHE cannot detect the controller:
+> 1. 에뮬레이터를 종료하고 `DHE_SelfTest.bat` 실행 / Close emulator and run `DHE_SelfTest.bat`
+> 2. DualSenseY로 전환 시도 / Try switching to DualSenseY
+> 3. 여러 컨트롤러 도구를 동시에 실행하지 마세요 / Avoid running multiple controller tools simultaneously
+> 4. Steam Input, DS4Windows, DSX, reWASD, HidHide 충돌 확인 / Check for conflicts
 
 DualSense 햅틱은 컨트롤러가 **Windows 오디오 출력 장치**로 인식되어야 작동합니다.
 DualSense haptics require the controller to appear as a **Windows audio output device**.

@@ -13,7 +13,7 @@ if not exist "dist\DHE" (
     exit /b 1
 )
 
-set "ZIP_NAME=DHE_v1.02.zip"
+set "ZIP_NAME=DHE_v1.03.zip"
 
 if exist "%ZIP_NAME%" del "%ZIP_NAME%"
 

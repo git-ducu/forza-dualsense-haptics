@@ -119,15 +119,17 @@ def _test_controller(result: TestResult):
     if not devices:
         result.failed("No DualSense controller detected")
         result.info("Ensure controller is connected via USB or Bluetooth")
-        result.info("If using Steam, disable Steam Input for DualSense")
+        result.info("If HID access fails, check tools that may capture the controller")
+        result.info("(Steam Input, DS4Windows, DSX, reWASD, or HidHide)")
         return
 
     target = devices[0]
     is_bt = _isBtTransport(target)
     transport = "Bluetooth" if is_bt else "USB"
     layout = BT_TRANSPORT if is_bt else USB_TRANSPORT
-    serial = target.get("serial_number", "unknown")
-    result.passed(f"DualSense detected via {transport} (serial: {serial[:8]}...)")
+    serial = target.get("serial_number", "") or ""
+    masked_serial = (serial[:4] + "****") if len(serial) > 4 else "unknown"
+    result.passed(f"DualSense detected via {transport} (serial: {masked_serial})")
 
     # Open HID device
     dev = hid.device()

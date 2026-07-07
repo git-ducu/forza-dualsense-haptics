@@ -64,6 +64,19 @@ class EffectMemory:
     gripReleaseUntil: float = 0.0
     gripTextureUntil: float = 0.0
 
+    # predictive ABS (v1.03)
+    predictiveAbsActive: bool = False
+    predictiveAbsUntil: float = 0.0
+    predictiveAbsForce: float = 0.0
+
+    # throttle traction (v1.03)
+    tractionActive: bool = False
+    tractionSlipPeak: float = 0.0
+
+    # drift fade (v1.03) — 1.0 = normal, lower = more attenuated
+    driftFade: float = 1.0
+    driftScore: float = 0.0
+
 
 # ── Pedal math ────────────────────────────────────────────────────────────────
 
@@ -369,22 +382,178 @@ def computeEngineBrakeResistance(vs: VehicleState, mem: EffectMemory,
     return buildSimpleResistance(0, force * 32)
 
 
-# ── Wheelspin vibration ──────────────────────────────────────────────────────
+# ── Drift fade update (v1.03) ────────────────────────────────────────────────
 
-def computeWheelSpinVibration(vs: VehicleState, tuning, now: float) -> TriggerEffect | None:
-    if not tuning.enableWheelSpin:
+def updateDriftFade(vs: VehicleState, mem: EffectMemory, tuning, dt: float):
+    """Update drift_fade multiplier each frame.
+    Drift is detected when: high lateral-g + rear tire slip + speed + throttle.
+    Attack is slow (300ms) to avoid false triggers on normal cornering.
+    Release is fast (150ms) so feedback resumes immediately after drift ends."""
+    if not tuning.enableDriftFade:
+        mem.driftFade = 1.0
+        return
+
+    speed = vs.speedKmh if math.isfinite(vs.speedKmh) else 0.0
+    if speed < tuning.driftFadeMinSpeedKmh:
+        mem.driftScore = max(0.0, mem.driftScore - dt * 6.0)
+        mem.driftFade = min(1.0, mem.driftFade + dt * 6.67)  # ~150ms release
+        return
+
+    # Compute drift indicators (sanitize for NaN/inf)
+    rawLateralG = abs(vs.accelX) / 9.81  # lateral accel → g-force
+    lateralG = rawLateralG if math.isfinite(rawLateralG) else 0.0
+    rawRearSlip = max(abs(vs.tireCombinedSlip[2]), abs(vs.tireCombinedSlip[3]))
+    rearSlip = rawRearSlip if math.isfinite(rawRearSlip) else 0.0
+    throttleNorm = vs.throttle / 255.0
+
+    # Score: weighted combination of drift indicators
+    # Requires lateral force + rear slip + throttle to avoid false positive on braking turns
+    score = 0.0
+    if lateralG > 0.4 and rearSlip > 0.3 and throttleNorm > 0.3:
+        score = min(1.0, (lateralG - 0.4) * 1.5 + (rearSlip - 0.3) * 0.8)
+
+    # Smooth score with asymmetric attack/release
+    if score > mem.driftScore:
+        # Slow attack (~300ms to reach full)
+        mem.driftScore = min(score, mem.driftScore + dt * 3.33)
+    else:
+        # Fast release (~150ms)
+        mem.driftScore = max(score, mem.driftScore - dt * 6.67)
+
+    # Convert score to fade multiplier
+    # driftFadeStrength is the MINIMUM multiplier (e.g., 0.3 = reduce to 30% during full drift)
+    target = 1.0 - mem.driftScore * (1.0 - tuning.driftFadeStrength)
+    mem.driftFade = target
+
+
+# ── Predictive ABS (L2, v1.03) ───────────────────────────────────────────────
+
+def computePredictiveAbsEffect(vs: VehicleState, mem: EffectMemory,
+                               tuning, now: float) -> TriggerEffect | None:
+    """Predicts brake lockup before it happens.
+    When front tires approach slip threshold under heavy braking:
+      Phase 1 (approaching): increases L2 resistance (warning)
+      Phase 2 (slipping): drops resistance + short vibration pulse (ABS-like)
+    This differs from the existing ABS which only activates AFTER lockup."""
+    if not tuning.enablePredictiveAbs:
         return None
-    # Check driven wheels for longitudinal slip
+    speed = vs.speedKmh if math.isfinite(vs.speedKmh) else 0.0
+    if vs.brake < 100 or speed < 25.0:
+        # Only active during medium-to-hard braking above walking speed
+        mem.predictiveAbsActive = False
+        return None
+
+    strength = min(1.5, tuning.predictiveAbsStrength)
+    if strength <= 0.0:
+        return None
+
+    # Front axle combined slip (both longitudinal and lateral) — sanitize
+    rawFrontSlip = max(abs(vs.tireCombinedSlip[0]), abs(vs.tireCombinedSlip[1]))
+    frontSlip = rawFrontSlip if math.isfinite(rawFrontSlip) else 0.0
+    threshold = max(0.05, tuning.predictiveAbsSlipThreshold)
+
+    # Approach ratio: how close we are to the slip threshold (0.0 = no slip, 1.0 = at threshold)
+    approachRatio = min(1.0, frontSlip / threshold)
+
+    if approachRatio < 0.5:
+        # Below 50% of threshold — not close enough, no effect
+        mem.predictiveAbsActive = False
+        mem.predictiveAbsForce = max(0.0, mem.predictiveAbsForce - 0.15)
+        return None
+
+    if frontSlip >= threshold:
+        # Phase 2: SLIPPING — drop resistance, add brief vibration pulse
+        mem.predictiveAbsActive = True
+        mem.predictiveAbsForce = max(0.0, mem.predictiveAbsForce - 0.25)
+        # Short vibration burst indicating the tire is sliding
+        slipExcess = min(1.0, (frontSlip - threshold) / max(0.1, threshold))
+        amp = max(3, min(6, int(3 + slipExcess * 3 * strength)))
+        freq = max(40, min(70, int(45 + slipExcess * 25)))
+        mem.predictiveAbsUntil = now + 0.06
+        return buildZoneVibration([amp] * 10, freq)
+    else:
+        # Phase 1: APPROACHING — smoothly increase resistance
+        # intensity goes from 0 at 50% approach to 1.0 at 100% approach
+        intensity = (approachRatio - 0.5) * 2.0
+        targetForce = intensity * strength * 2.0  # max ~3.0 extra force units
+        # Smooth the force change to avoid jitter
+        if targetForce > mem.predictiveAbsForce:
+            mem.predictiveAbsForce = min(targetForce, mem.predictiveAbsForce + 0.12)
+        else:
+            mem.predictiveAbsForce = max(targetForce, mem.predictiveAbsForce - 0.08)
+        mem.predictiveAbsActive = True
+
+        if mem.predictiveAbsForce < 0.3:
+            return None
+        # Add resistance on top of normal brake (felt as "L2 getting stiffer")
+        addedForce = max(1, min(4, int(mem.predictiveAbsForce)))
+        return buildSimpleResistance(0, addedForce * 32 + 64)
+
+    return None  # unreachable but safe
+
+
+# ── Throttle traction resistance (R2, v1.03) ─────────────────────────────────
+
+def computeThrottleTractionEffect(vs: VehicleState, mem: EffectMemory,
+                                  tuning, now: float) -> TriggerEffect | None:
+    """Communicates traction loss through R2 resistance changes.
+    Mild slip: slightly stiffen R2 (warning that grip is fading).
+    Strong slip: soften R2 + vibration (grip lost, power not connecting).
+    Throttle released: immediately clears."""
+    if not tuning.enableThrottleTraction:
+        return None
+    speed = vs.speedKmh if math.isfinite(vs.speedKmh) else 0.0
+    if vs.throttle < 60 or speed < 15.0:
+        # Must be on throttle and moving
+        mem.tractionActive = False
+        mem.tractionSlipPeak = max(0.0, mem.tractionSlipPeak * 0.7)
+        return None
+
+    strength = min(1.5, tuning.throttleTractionStrength)
+    if strength <= 0.0:
+        return None
+
+    # Driven wheel slip — sanitize
     indices = vs.drivenWheelIndices
-    maxSlip = max(abs(vs.tireSlipRatio[i]) for i in indices)
-    if maxSlip < tuning.wheelSpinSlipThreshold:
+    rawDrivenSlip = max(abs(vs.tireSlipRatio[i]) for i in indices)
+    drivenSlip = rawDrivenSlip if math.isfinite(rawDrivenSlip) else 0.0
+    threshold = max(0.05, tuning.throttleTractionSlipThreshold)
+
+    if drivenSlip < threshold * 0.6:
+        # Well within grip — no effect
+        mem.tractionActive = False
+        mem.tractionSlipPeak = max(0.0, mem.tractionSlipPeak * 0.8)
         return None
-    # Intensity ramps from threshold to saturation
-    intensity = min(1.0, (maxSlip - tuning.wheelSpinSlipThreshold) /
-                   max(0.1, tuning.wheelSpinSaturation - tuning.wheelSpinSlipThreshold))
-    amp = max(2, min(7, int(tuning.wheelSpinBaseAmplitude + intensity * 3)))
-    freq = max(50, int(55 + intensity * 35))  # 55Hz→90Hz based on slip
-    return buildSoftZoneVibration(amp, freq, topBoost=1)
+
+    # Apply drift fade: reduce traction feedback during sustained drift
+    fadeMul = mem.driftFade
+
+    # Track peak slip for smooth decay
+    if drivenSlip > mem.tractionSlipPeak:
+        mem.tractionSlipPeak = drivenSlip
+    else:
+        mem.tractionSlipPeak = mem.tractionSlipPeak * 0.92 + drivenSlip * 0.08
+
+    effectiveSlip = mem.tractionSlipPeak
+    slipRatio = min(1.5, (effectiveSlip - threshold * 0.6) / max(0.1, threshold))
+
+    if slipRatio < 0.5:
+        # Mild approach — subtle stiffening of R2
+        intensity = slipRatio * 2.0 * strength * fadeMul
+        if intensity < 0.2:
+            return None
+        addedForce = max(1, min(3, int(intensity * 2.5)))
+        mem.tractionActive = True
+        return buildSimpleResistance(0, addedForce * 32 + 32)
+    else:
+        # Strong slip — vibration pulse (grip lost)
+        mem.tractionActive = True
+        pulseIntensity = min(1.0, (slipRatio - 0.5) * 2.0) * strength * fadeMul
+        if pulseIntensity < 0.15:
+            return None
+        amp = max(2, min(6, int(2 + pulseIntensity * 4)))
+        freq = max(35, min(65, int(40 + pulseIntensity * 25)))
+        return buildSoftZoneVibration(amp, freq, topBoost=0)
 
 
 # ── Brake resistance (L2 ramp) ───────────────────────────────────────────────
@@ -524,6 +693,9 @@ def computeTriggerFrame(vs: VehicleState, mem: EffectMemory,
     # Evaluate slip transients (needed for R2 onset/recovery effects)
     _evaluateSlipTransients(vs, mem, tuning, now)
 
+    # Update drift fade multiplier (v1.03)
+    updateDriftFade(vs, mem, tuning, 1.0 / 60.0)  # assume ~60Hz telemetry rate
+
     leftEffect, leftLabel = _resolveBrakeTrigger(vs, mem, tuning, now, tDict, settings)
     rightEffect, rightLabel = _resolveThrottleTrigger(vs, mem, tuning, now)
     return TriggerFrame(leftEffect, rightEffect, leftLabel, rightLabel)
@@ -554,6 +726,11 @@ def _resolveBrakeTrigger(vs: VehicleState, mem: EffectMemory,
     absEffect = computeAbsPulseEffect(vs, mem, tuning, now)
     if absEffect is not None:
         return absEffect, "abs"
+
+    # 2b. Predictive ABS — warns of approaching lockup before it happens (v1.03)
+    predAbsEffect = computePredictiveAbsEffect(vs, mem, tuning, now)
+    if predAbsEffect is not None:
+        return predAbsEffect, "pred-abs"
 
     # 3. Engine braking — light resistance when coasting at high RPM
     engBrake = computeEngineBrakeResistance(vs, mem, tuning, now)
@@ -621,10 +798,24 @@ def _resolveThrottleTrigger(vs: VehicleState, mem: EffectMemory,
     if now < mem.slipPulseUntil:
         return buildSimpleResistance(0, 160), "slip-onset"  # ~5 * 32
 
-    # 6. Wheelspin vibration
-    spinEffect = computeWheelSpinVibration(vs, tuning, now)
-    if spinEffect is not None:
-        return spinEffect, "wheelspin"
+    # 6. Wheelspin vibration (drift fade applied v1.03)
+    if tuning.enableWheelSpin:
+        indices = vs.drivenWheelIndices
+        maxSlip = max(abs(vs.tireSlipRatio[i]) for i in indices)
+        if maxSlip >= tuning.wheelSpinSlipThreshold:
+            intensity = min(1.0, (maxSlip - tuning.wheelSpinSlipThreshold) /
+                           max(0.1, tuning.wheelSpinSaturation - tuning.wheelSpinSlipThreshold))
+            # Apply drift fade to amplitude
+            fadedIntensity = intensity * mem.driftFade
+            if fadedIntensity > 0.05:
+                amp = max(2, min(7, int(tuning.wheelSpinBaseAmplitude + fadedIntensity * 3)))
+                freq = max(50, int(55 + intensity * 35))
+                return buildSoftZoneVibration(amp, freq, topBoost=1), "wheelspin"
+
+    # 6b. Throttle traction resistance — grip loss through R2 (v1.03)
+    tractionEffect = computeThrottleTractionEffect(vs, mem, tuning, now)
+    if tractionEffect is not None:
+        return tractionEffect, "traction"
 
     # 7. End-stop wall → latched via hysteresis
     mem.r2WallLatched = checkWallLatchHysteresis(
